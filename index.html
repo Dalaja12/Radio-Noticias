@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Prueba Proxy Web</title>
+<style>
+  body { background:#0a0f1a; color:white; font-family:Arial; padding:20px; }
+  input { padding:10px; font-size:18px; width:300px; }
+  button { padding:10px 15px; font-size:18px; }
+  .section { margin-top:25px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+  .card { background:#111c33; padding:10px; border-radius:10px; }
+  img { width:100%; border-radius:8px; }
+</style>
+</head>
+<body>
+
+<h1>Buscador Web (Proxy de Prueba)</h1>
+
+<input id="q" placeholder="Buscar...">
+<button onclick="buscar()">Buscar</button>
+
+<div id="resultados"></div>
+
+<script>
+async function buscar() {
+  const q = document.getElementById("q").value;
+  if (!q) return alert("Escribe algo");
+
+  document.getElementById("resultados").innerHTML = "<h2>Cargando...</h2>";
+
+  const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  const data = await r.json();
+
+  let html = "";
+
+  /* Wikipedia */
+  if (data.wiki) {
+    html += `<div class="section"><h2>Wikipedia</h2>
+      <div class="card"><h3>${data.wiki.title}</h3><p>${data.wiki.extract}</p></div></div>`;
+  }
+
+  /* Imágenes */
+  html += `<div class="section"><h2>Imágenes</h2><div class="grid">`;
+  data.images.forEach(i => {
+    html += `<div class="card"><img src="${i.thumbnail || i.image}"></div>`;
+  });
+  html += `</div></div>`;
+
+  /* Noticias */
+  html += `<div class="section"><h2>Noticias</h2>`;
+  data.news.forEach(n => {
+    html += `<div class="card"><a href="${n.link}" target="_blank">${n.title}</a><br><small>${n.source}</small></div>`;
+  });
+  html += `</div>`;
+
+  /* PDFs */
+  html += `<div class="section"><h2>PDFs</h2><div class="grid">`;
+  data.pdfs.forEach(p => {
+    html += `<div class="card"><a href="${p.url}" target="_blank">${p.url}</a></div>`;
+  });
+  html += `</div></div>`;
+
+  /* Audio */
+  html += `<div class="section"><h2>Audio MP3</h2><div class="grid">`;
+  data.audio.forEach(a => {
+    html += `<div class="card"><a href="${a.url}" target="_blank">${a.url}</a></div>`;
+  });
+  html += `</div></div>`;
+
+  /* Web general */
+  html += `<div class="section"><h2>Web</h2>`;
+  data.web.forEach(w => {
+    html += `<div class="card"><a href="${w.url}" target="_blank">${w.title}</a></div>`;
+  });
+  html += `</div>`;
+
+  document.getElementById("resultados").innerHTML = html;
+}
+</script>
+
+</body>
+</html>
