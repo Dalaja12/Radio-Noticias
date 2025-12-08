@@ -6,36 +6,38 @@ export default async function handler(req, res) {
   if (!q) return res.status(400).json({ error: "Missing q" });
 
   try {
-    // Ejecutamos todas las búsquedas a la vez
-    const results = await Promise.all([
-      wiki(q),
-      images(q),
-      news(q),
-      pdfs(q),
-      audio(q),
-      web(q)
-    ]);
+    const [wikiData, imagesData, newsData, pdfData, audioData, webData] =
+      await Promise.all([
+        wiki(q),
+        images(q),
+        news(q),
+        pdfs(q),
+        audio(q),
+        web(q)
+      ]);
 
-    res.status(200).json({
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    
+    return res.status(200).json({
       query: q,
-      wiki: results[0],
-      images: results[1],
-      news: results[2],
-      pdfs: results[3],
-      audio: results[4],
-      web: results[5]
+      wiki: wikiData,
+      images: imagesData,
+      news: newsData,
+      pdfs: pdfData,
+      audio: audioData,
+      web: webData
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Search proxy failed", details: err.message });
+    console.error("Search API Error:", err);
+    res.status(500).json({ error: "Internal Proxy Error", detail: err.message });
   }
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                         WIKIPEDIA                             */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*                    WIKIPEDIA                     */
+/* ──────────────────────────────────────────────── */
 
 async function wiki(q) {
   try {
@@ -57,14 +59,34 @@ async function wiki(q) {
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                         IMÁGENES                              */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*     IMÁGENES (con token vqd — FUNCIONA 2025)    */
+/* ──────────────────────────────────────────────── */
 
 async function images(q) {
   try {
-    const url = `https://duckduckgo.com/i.js?o=json&q=${encodeURIComponent(q)}`;
-    const r = await fetch(url, { headers: { "User-Agent": "Mozilla" } });
+    // 1) Sacar token vqd
+    const home = await fetch("https://duckduckgo.com/?q=" + encodeURIComponent(q), {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+
+    const homeHTML = await home.text();
+    const vqdMatch = homeHTML.match(/vqd=([\d-]+)/);
+
+    if (!vqdMatch) {
+      console.warn("No se encontró vqd");
+      return [];
+    }
+
+    const vqd = vqdMatch[1];
+
+    // 2) Buscar imágenes con token vqd
+    const url = `https://duckduckgo.com/i.js?o=json&q=${encodeURIComponent(q)}&vqd=${vqd}`;
+    
+    const r = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+
     const j = await r.json();
 
     return j.results?.map(i => ({
@@ -74,21 +96,23 @@ async function images(q) {
       source: i.url
     })) || [];
 
-  } catch {
+  } catch (error) {
+    console.error("Error en imágenes:", error);
     return [];
   }
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                         NOTICIAS                               */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*                      NOTICIAS                    */
+/* ──────────────────────────────────────────────── */
 
 async function news(q) {
   try {
     const rss = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=es-419&gl=MX&ceid=MX:es-419`;
     const r = await fetch(rss);
     const xml = await r.text();
+
     const parsed = await parseStringPromise(xml);
 
     return parsed.rss.channel[0].item.map(x => ({
@@ -97,21 +121,20 @@ async function news(q) {
       date: x.pubDate[0],
       source: x.source?.[0]?._ || ""
     }));
-
   } catch {
     return [];
   }
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                           PDFS                                 */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*                       PDFS                       */
+/* ──────────────────────────────────────────────── */
 
 async function pdfs(q) {
   try {
     const url = `https://duckduckgo.com/html/?q=${encodeURIComponent("filetype:pdf " + q)}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
     const pdfs = [...html.matchAll(/https?:\/\/[^"']+?\.pdf/g)].map(m => m[0]);
@@ -123,18 +146,17 @@ async function pdfs(q) {
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                          AUDIO MP3                              */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*                     AUDIO MP3                    */
+/* ──────────────────────────────────────────────── */
 
 async function audio(q) {
   try {
     const url = `https://duckduckgo.com/html/?q=${encodeURIComponent("filetype:mp3 " + q)}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
     const links = [...html.matchAll(/https?:\/\/[^"']+?\.mp3/g)].map(m => m[0]);
-
     return [...new Set(links)].slice(0, 20).map(url => ({ url }));
 
   } catch {
@@ -143,14 +165,14 @@ async function audio(q) {
 }
 
 
-/* ───────────────────────────────────────────────────────────── */
-/*                   RESULTADOS WEB GENERALES                     */
-/* ───────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/*                 RESULTADOS WEB                   */
+/* ──────────────────────────────────────────────── */
 
 async function web(q) {
   try {
     const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
     const results = [];
@@ -170,3 +192,4 @@ async function web(q) {
     return [];
   }
 }
+
