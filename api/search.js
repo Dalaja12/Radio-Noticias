@@ -3,49 +3,51 @@ import { parseStringPromise } from "xml2js";
 
 export default async function handler(req, res) {
   const q = (req.query.q || "").trim();
-  if (!q) return res.status(400).json({ error: "Missing q" });
+  if (!q) return res.status(400).json({ error: "missing q" });
 
   try {
-    const [wikiData, imagesData, newsData, pdfData, audioData, webData] =
+    const [wikiResult, imagesResult, newsResult, pdfResult, audioResult, webResult] =
       await Promise.all([
         wiki(q),
-        images(q),
-        news(q),
-        pdfs(q),
-        audio(q),
-        web(q)
+        bingImages(q),
+        bingNews(q),
+        bingPDF(q),
+        bingMP3(q),
+        bingWeb(q)
       ]);
 
     res.setHeader("Access-Control-Allow-Origin", "*");
-    
-    return res.status(200).json({
+
+    res.status(200).json({
       query: q,
-      wiki: wikiData,
-      images: imagesData,
-      news: newsData,
-      pdfs: pdfData,
-      audio: audioData,
-      web: webData
+      wiki: wikiResult,
+      images: imagesResult,
+      news: newsResult,
+      pdfs: pdfResult,
+      audio: audioResult,
+      web: webResult
     });
 
-  } catch (err) {
-    console.error("Search API Error:", err);
-    res.status(500).json({ error: "Internal Proxy Error", detail: err.message });
+  } catch (e) {
+    console.log(e);
+    res.status(500).json({ error: e.message });
   }
 }
 
 
-/* ──────────────────────────────────────────────── */
-/*                    WIKIPEDIA                     */
-/* ──────────────────────────────────────────────── */
-
+/* ──────────────────────────────── */
+/*          WIKIPEDIA              */
+/* ──────────────────────────────── */
 async function wiki(q) {
   try {
-    const url = `https://es.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro&explaintext&titles=${encodeURIComponent(q)}&redirects=1`;
+    const url =
+      `https://es.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro&explaintext&titles=${encodeURIComponent(q)}`;
+    
     const r = await fetch(url);
     const j = await r.json();
-
+    
     const page = Object.values(j.query.pages)[0];
+
     if (page.missing) return null;
 
     return {
@@ -59,67 +61,23 @@ async function wiki(q) {
 }
 
 
-/* ──────────────────────────────────────────────── */
-/*     IMÁGENES (con token vqd — FUNCIONA 2025)    */
-/* ──────────────────────────────────────────────── */
-
-async function images(q) {
+/* ──────────────────────────────── */
+/*       BING IMAGES 2025          */
+/* ──────────────────────────────── */
+async function bingImages(q) {
   try {
-    // 1) Sacar token vqd
-    const home = await fetch("https://duckduckgo.com/?q=" + encodeURIComponent(q), {
-      headers: { "User-Agent": "Mozilla/5.0" }
-    });
-
-    const homeHTML = await home.text();
-    const vqdMatch = homeHTML.match(/vqd=([\d-]+)/);
-
-    if (!vqdMatch) {
-      console.warn("No se encontró vqd");
-      return [];
-    }
-
-    const vqd = vqdMatch[1];
-
-    // 2) Buscar imágenes con token vqd
-    const url = `https://duckduckgo.com/i.js?o=json&q=${encodeURIComponent(q)}&vqd=${vqd}`;
+    const url = `https://www.bing.com/images/search?q=${encodeURIComponent(q)}`;
     
-    const r = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" }
-    });
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const html = await r.text();
 
-    const j = await r.json();
+    const matches = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)];
 
-    return j.results?.map(i => ({
-      image: i.image,
-      thumbnail: i.thumbnail,
-      title: i.title,
-      source: i.url
-    })) || [];
-
-  } catch (error) {
-    console.error("Error en imágenes:", error);
-    return [];
-  }
-}
-
-
-/* ──────────────────────────────────────────────── */
-/*                      NOTICIAS                    */
-/* ──────────────────────────────────────────────── */
-
-async function news(q) {
-  try {
-    const rss = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=es-419&gl=MX&ceid=MX:es-419`;
-    const r = await fetch(rss);
-    const xml = await r.text();
-
-    const parsed = await parseStringPromise(xml);
-
-    return parsed.rss.channel[0].item.map(x => ({
-      title: x.title[0],
-      link: x.link[0],
-      date: x.pubDate[0],
-      source: x.source?.[0]?._ || ""
+    return matches.slice(0, 30).map(m => ({
+      image: m[1],
+      thumbnail: m[1],
+      title: q,
+      source: "bing"
     }));
   } catch {
     return [];
@@ -127,17 +85,41 @@ async function news(q) {
 }
 
 
-/* ──────────────────────────────────────────────── */
-/*                       PDFS                       */
-/* ──────────────────────────────────────────────── */
-
-async function pdfs(q) {
+/* ──────────────────────────────── */
+/*           BING NEWS             */
+/* ──────────────────────────────── */
+async function bingNews(q) {
   try {
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent("filetype:pdf " + q)}`;
+    const rss = `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`;
+    const r = await fetch(rss);
+    const xml = await r.text();
+
+    const parsed = await parseStringPromise(xml);
+    const items = parsed.rss.channel[0].item;
+
+    return items.slice(0, 10).map(n => ({
+      title: n.title[0],
+      link: n.link[0],
+      date: n.pubDate[0]
+    }));
+  } catch {
+    return [];
+  }
+}
+
+
+/* ──────────────────────────────── */
+/*          BING PDF SEARCH        */
+/* ──────────────────────────────── */
+async function bingPDF(q) {
+  try {
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(q + " filetype:pdf")}`;
+    
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
     const pdfs = [...html.matchAll(/https?:\/\/[^"']+?\.pdf/g)].map(m => m[0]);
+
     return [...new Set(pdfs)].slice(0, 20).map(url => ({ url }));
 
   } catch {
@@ -146,18 +128,19 @@ async function pdfs(q) {
 }
 
 
-/* ──────────────────────────────────────────────── */
-/*                     AUDIO MP3                    */
-/* ──────────────────────────────────────────────── */
-
-async function audio(q) {
+/* ──────────────────────────────── */
+/*          BING MP3 SEARCH        */
+/* ──────────────────────────────── */
+async function bingMP3(q) {
   try {
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent("filetype:mp3 " + q)}`;
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(q + " filetype:mp3")}`;
+    
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
-    const links = [...html.matchAll(/https?:\/\/[^"']+?\.mp3/g)].map(m => m[0]);
-    return [...new Set(links)].slice(0, 20).map(url => ({ url }));
+    const mp3 = [...html.matchAll(/https?:\/\/[^"']+?\.mp3/g)].map(m => m[0]);
+
+    return [...new Set(mp3)].slice(0, 20).map(url => ({ url }));
 
   } catch {
     return [];
@@ -165,18 +148,18 @@ async function audio(q) {
 }
 
 
-/* ──────────────────────────────────────────────── */
-/*                 RESULTADOS WEB                   */
-/* ──────────────────────────────────────────────── */
-
-async function web(q) {
+/* ──────────────────────────────── */
+/*         BING WEB RESULTS        */
+/* ──────────────────────────────── */
+async function bingWeb(q) {
   try {
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await r.text();
 
     const results = [];
-    const regex = /<a.*?class="result__a".*?href="(.*?)".*?>(.*?)<\/a>/g;
+
+    const regex = /<h2><a href="(.*?)".*?>(.*?)<\/a>/g;
 
     let m;
     while ((m = regex.exec(html)) !== null && results.length < 20) {
@@ -192,4 +175,5 @@ async function web(q) {
     return [];
   }
 }
+
 
