@@ -2,131 +2,132 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Mini IA Online (Sin API)</title>
+<title>IA Online - Sin API</title>
 
-<!-- IA desde CDN: no requiere servidor, CPU ni API -->
 <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js"></script>
 
 <style>
     body {
-        margin:0;
-        background:#0e1320;
-        color:white;
-        font-family:Arial;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        padding:20px;
+        background: #0d1117;
+        color: #ffffff;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
     }
-    #container {
-        width:90%;
-        max-width:700px;
+
+    h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #58a6ff;
     }
-    h1 {
-        text-align:center;
-        margin-bottom:20px;
-    }
+
     #chat {
-        background:#141b2e;
-        border-radius:12px;
-        padding:20px;
-        height:400px;
-        overflow-y:auto;
-        border:1px solid #25345c;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 15px;
+        height: 350px;
+        overflow-y: auto;
+        margin-bottom: 20px;
     }
+
     .msg-user {
-        color:#62e0ff;
-        margin:10px 0;
+        color: #4cd6ff;
+        margin: 6px 0;
     }
+
     .msg-ai {
-        color:#90ffa2;
-        margin:10px 0;
+        color: #7fff85;
+        margin: 6px 0;
     }
-    #input-area {
-        margin-top:15px;
-        display:flex;
-        gap:10px;
-    }
+
     input {
-        flex:1;
-        padding:12px;
-        border-radius:8px;
-        border:none;
-        font-size:16px;
+        width: 75%;
+        padding: 12px;
+        font-size: 16px;
+        border-radius: 8px;
+        border: none;
     }
+
     button {
-        padding:12px 18px;
-        border:none;
-        border-radius:8px;
-        background:#3f63ff;
-        color:white;
-        cursor:pointer;
-        font-size:16px;
+        padding: 12px 18px;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
+        background: #238636;
+        color: white;
+        cursor: pointer;
     }
+
     button:hover {
-        background:#657dff;
+        background: #2ea043;
     }
 </style>
-
 </head>
+
 <body>
 
-<div id="container">
-    <h1>🤖 Mini IA Online (Sin API)</h1>
+<h2>🤖 IA Online — Sin API, Sin Límite</h2>
 
-    <div id="chat"></div>
+<div id="chat"></div>
 
-    <div id="input-area">
-        <input id="prompt" placeholder="Escribe algo...">
-        <button onclick="send()">Enviar</button>
-    </div>
-</div>
+<input id="txt" placeholder="Escribe algo..." autocomplete="off">
+<button onclick="send()">Enviar</button>
 
 <script>
 let generator;
-const chat = document.getElementById("chat");
+let cargando = true;
 
-// Mensajes en pantalla
-function addAI(text) {
-    chat.innerHTML += `<div class='msg-ai'><b>IA:</b> ${text}</div>`;
-    chat.scrollTop = chat.scrollHeight;
-}
+// Mostrar mensajes en pantalla
 function addUser(text) {
     chat.innerHTML += `<div class='msg-user'><b>Tú:</b> ${text}</div>`;
     chat.scrollTop = chat.scrollHeight;
 }
 
-// Cargar modelo IA (tarda 3–7 seg en móviles)
+function addAI(text) {
+    chat.innerHTML += `<div class='msg-ai'><b>IA:</b> ${text}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// Cargar modelo al abrir la página
 (async () => {
-    addAI("Cargando IA... espera unos segundos.");
-    
+    addAI("Cargando IA… esto puede tardar 10–20 segundos...");
     generator = await window.transformers.pipeline(
         "text-generation",
-        "Xenova/phi2"  // IA pequeña, inteligente y GRATIS
+        "Xenova/phi2"   // Modelo inteligente y ligero
     );
-
-    addAI("¡Listo! Ya puedes hablar conmigo 😄");
+    cargando = false;
+    addAI("¡Listo! Soy tu IA local. Pregúntame lo que quieras.");
 })();
 
-// Enviar mensaje
 async function send() {
-    const input = document.getElementById("prompt");
-    const text = input.value.trim();
-    if (!text) return;
+    if (cargando) {
+        alert("La IA aún está cargando… espera un momento.");
+        return;
+    }
 
-    addUser(text);
+    const input = document.getElementById("txt");
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    addUser(msg);
     input.value = "";
 
-    addAI("Pensando...");
-
-    const out = await generator(text, {
-        max_new_tokens: 70,
-        temperature: 0.8,
-        top_p: 0.9
+    // Generar respuesta
+    const output = await generator(msg, {
+        max_new_tokens: 80,
+        temperature: 0.7
     });
 
-    let response = out[0].generated_text.replace(text, "").trim();
+    let response = output[0].generated_text.replace(msg, "").trim();
 
-    // Reemplaza mensaje
+    addAI(response);
+}
+</script>
+
+</body>
+</html>
+
+
 
 
